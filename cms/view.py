@@ -17,24 +17,10 @@ MenuOptions = TypedDict(
 
 class Menu:
     logged_user: User | None
-    logged_options: list[MenuOptions]
-    not_logged_options: list[MenuOptions]
+    selected_site: Site | None
+    selected_post: Post | None
 
     def __init__(self):
-        self.not_logged_options = [
-            {"message": "Criar um usuário", "function": self.create_user},
-            {"message": "Fazer Login", "function": self.login},
-            {"message": "Listar sites", "function": self.show_available_sites},
-        ]
-
-        self.logged_options = [
-            {"message": "Exibir dados de perfil", "function": self.show_profile},
-            {"message": "Criar um site", "function": self.create_site},
-            {"message": "Listar sites", "function": self.show_available_sites},
-            {"message": "Listar sites do usuário", "function": self.show_user_sites},
-            {"message": "Selecionar um site", "function": self.select_site},
-            {"message": "Fazer logout", "function": self.logout},
-        ]
         self.user_repo = UserRepository()
         self.site_repo = SiteRepository()
         self.post_repo = PostRepository()
@@ -45,19 +31,44 @@ class Menu:
         self.selected_post = None
 
     def show(self):
+        try:
+            self.main_menu()
+        except KeyboardInterrupt:
+            print("\nSaindo.")
+
+    def main_menu(self):
         while True:
             os.system("clear")
             print("CMS\n")
 
             if self.logged_user:
                 print(f"User logged in: {self.logged_user.username}")
-                options = self.logged_options
+                options: list[MenuOptions] = [
+                    {
+                        "message": "Exibir dados de perfil",
+                        "function": self.show_profile,
+                    },
+                    {"message": "Criar um site", "function": self.create_site},
+                    {"message": "Listar sites", "function": self.select_site},
+                    {
+                        "message": "Listar sites do usuário",
+                        "function": self.show_user_sites,
+                    },
+                    {"message": "Fazer logout", "function": self.logout},
+                ]
             else:
-                options = self.not_logged_options
+                options: list[MenuOptions] = [
+                    {
+                        "message": "Registrar um novo usuário",
+                        "function": self.create_user,
+                    },
+                    {"message": "Fazer Login", "function": self.login},
+                ]
 
             for i, option in enumerate(options):
                 print(f"{i + 1}. {option['message']}")
             print("0. Sair")
+            print(" ")
 
             try:
                 selected_option = int(
@@ -76,31 +87,27 @@ class Menu:
 
             os.system("clear")
             options[selected_option - 1]["function"]()
-            print(" ")
-            input("Clique enter para voltar ao menu.")
 
-    def show_site(self, selected_site: Site):
-        if not self.logged_user:
+    def site_menu(self):
+        if not self.logged_user or not self.selected_site:
             return
 
-        self.selected_site = selected_site
-
         options: list[MenuOptions] = [
-            {"message": "Listar posts do site", "function": self.show_site_posts},
-            {"message": "Selecionar um post", "function": self.select_post},
+            {"message": "Listar posts do site", "function": self.select_post},
         ]
 
-        if self.logged_user.username == selected_site.owner.username:
+        if self.logged_user.username == self.selected_site.owner.username:
             options.append(
                 {"message": "Criar post no site", "function": self.create_site_post},
             )
 
         while True:
             os.system("clear")
-            print(f"Opções para o site '{selected_site.name}'")
+            print(f"Opções para o site '{self.selected_site.name}'")
             for i, option in enumerate(options):
                 print(f"{i + 1}. {option['message']}")
-            print("0. Sair")
+            print("0. Voltar")
+            print(" ")
 
             try:
                 selected_option = int(
@@ -119,13 +126,10 @@ class Menu:
 
             os.system("clear")
             options[selected_option - 1]["function"]()
-            print(" ")
-            input("Clique enter para voltar ao menu.")
 
-    def show_post(self, selected_post: Post):
-        if not self.logged_user:
+    def post_menu(self):
+        if not self.logged_user or not self.selected_post:
             return
-        self.selected_post = selected_post
 
         options: list[MenuOptions] = [
             {
@@ -137,19 +141,20 @@ class Menu:
 
         while True:
             os.system("clear")
-            print(selected_post.title)
-            print(f"Data de criação: {selected_post.created_at}")
+            print(self.selected_post.title)
+            print(f"Data de criação: {self.selected_post.created_at}")
             print(" ")
-            print(selected_post.body)
+            print(self.selected_post.body)
             print(" ")
-            print(f"Criado por: {selected_post.poster.username}")
+            print(f"Criado por: {self.selected_post.poster.username}")
             print(" ")
             print(" ")
 
             print("Opções para o post ")
             for i, option in enumerate(options):
                 print(f"{i + 1}. {option['message']}")
-            print("0. Sair")
+            print("0. Voltar")
+            print(" ")
 
             try:
                 selected_option = int(
@@ -168,8 +173,6 @@ class Menu:
 
             os.system("clear")
             options[selected_option - 1]["function"]()
-            print(" ")
-            input("Clique enter para voltar ao menu.")
 
     def create_user(self):
         first_name = input("Digite seu primeiro nome: ")
@@ -180,6 +183,8 @@ class Menu:
 
         user = User(first_name, last_name, email, username, password, UserRole.USER)
         self.user_repo.add_user(user)
+
+        input("Usuário Criado! Clique Enter para voltar ao menu.")
 
     def login(self):
         username = input("Username: ")
@@ -202,6 +207,9 @@ class Menu:
             print(f"E-mail: {self.logged_user.email}")
             print(f"Role: {self.logged_user.role}")
 
+        print(" ")
+        input("Clique Enter para voltar ao Menu.")
+
     def create_site(self):
         if not self.logged_user:
             print("Usuário não está logado.")
@@ -211,10 +219,7 @@ class Menu:
         site = Site(owner=self.logged_user, name=site_name)
         self.site_repo.add_site(site)
 
-    def show_available_sites(self):
-        sites: list[Site] = self.site_repo.get_sites()
-        for i, site in enumerate(sites):
-            print(f"{i + 1}. {site.name}")
+        input("Site criado. Clique Enter para voltar ao menu.")
 
     def show_user_sites(self):
         if not self.logged_user:
@@ -224,10 +229,15 @@ class Menu:
         for i, site in enumerate(user_sites):
             print(f"{i + 1}. {site.name}")
 
+        print(" ")
+        input("Clique Enter para voltar ao Menu.")
+
     def select_site(self):
         sites: list[Site] = self.site_repo.get_sites()
         for i, site in enumerate(sites):
             print(f"{i + 1}. {site.name}")
+        print("0. Voltar")
+        print(" ")
 
         while True:
             try:
@@ -245,7 +255,11 @@ class Menu:
                 print("Opção inválida.\n")
                 continue
 
-            self.show_site(sites[selected_option - 1])
+            self.selected_site = sites[selected_option - 1]
+            break
+
+        self.site_menu()
+        self.selected_site = None
 
     def create_site_post(self):
         if not self.selected_site:
@@ -262,13 +276,8 @@ class Menu:
         )
         self.post_repo.add_post(post)
 
-    def show_site_posts(self):
-        if not self.selected_site:
-            return
-
-        posts: list[Post] = self.post_repo.get_site_posts(self.selected_site)
-        for i, post in enumerate(posts):
-            print(f"{i + 1}. {post.title}")
+        print(" ")
+        input("Post criado. Clique Enter para voltar ao menu.")
 
     def select_post(self):
         if not self.selected_site:
@@ -277,6 +286,8 @@ class Menu:
         posts: list[Post] = self.post_repo.get_site_posts(self.selected_site)
         for i, post in enumerate(posts):
             print(f"{i + 1}. {post.title}")
+        print("0. Voltar")
+        print(" ")
 
         while True:
             try:
@@ -294,7 +305,11 @@ class Menu:
                 print("Opção inválida.\n")
                 continue
 
-            self.show_post(posts[selected_option - 1])
+            self.selected_post = posts[selected_option - 1]
+            break
+
+        self.post_menu()
+        self.selected_post = None
 
     def comment_on_post(self):
         if not self.selected_post or not self.logged_user:
@@ -319,6 +334,9 @@ class Menu:
             print(comment.body)
             print(f"{comment.commenter.username} @ {comment.created_at}")
             print(" ")
+
+        print(" ")
+        input("Clique Enter para voltar ao Menu.")
 
     def _populate(self):
         admin = User(
