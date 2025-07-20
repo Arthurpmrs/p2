@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from typing import Callable, TypedDict
 
@@ -8,6 +9,7 @@ from cms.repository import (
     SiteRepository,
     UserRepository,
 )
+from cms.utils import read_datetime_from_cli
 
 
 MenuOptions = TypedDict(
@@ -267,17 +269,26 @@ class Menu:
 
         title = input("Digite o título do post: ")
         body = input("Digite o conteúdo do post: ")
+        is_scheduled = input("Deseja agendar o post? (y/n) ")
+
+        if is_scheduled.strip().lower() == "y":
+            scheduled_to = read_datetime_from_cli()
+        else:
+            scheduled_to = datetime.now()
 
         post = Post(
             poster=self.selected_site.owner,
             site=self.selected_site,
             title=title,
             body=body,
+            scheduled_to=scheduled_to,
         )
         self.post_repo.add_post(post)
 
         print(" ")
         input("Post criado. Clique Enter para voltar ao menu.")
+
+    from datetime import datetime
 
     def select_post(self):
         if not self.selected_site:

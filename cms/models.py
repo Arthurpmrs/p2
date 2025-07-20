@@ -33,7 +33,11 @@ class Post:
     site: Site
     title: str
     body: str
+    scheduled_to: datetime = field(default_factory=datetime.now)
     created_at: datetime = field(default_factory=datetime.now)
+
+    def is_visible(self) -> bool:
+        return self.scheduled_to >= datetime.now()
 
 
 @dataclass

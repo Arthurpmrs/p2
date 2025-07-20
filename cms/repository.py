@@ -1,3 +1,4 @@
+from datetime import datetime
 from itertools import count
 from cms.models import Comment, Post, Site, User
 
@@ -59,7 +60,13 @@ class PostRepository:
         return post_id
 
     def get_site_posts(self, site: Site) -> list[Post]:
-        return [post for post in self.posts.values() if post.site.id == site.id]
+        posts: list[Post] = []
+        now = datetime.now()
+        for post in self.posts.values():
+            if post.site.id == site.id and post.scheduled_to < now:
+                posts.append(post)
+
+        return posts
 
 
 class CommentRepository:
