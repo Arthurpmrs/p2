@@ -1,6 +1,6 @@
 from datetime import datetime
 from itertools import count
-from cms.models import Comment, Post, Site, User
+from cms.models import Comment, Media, Post, Site, User
 
 
 class UserRepository:
@@ -83,3 +83,20 @@ class CommentRepository:
         return [
             comment for comment in self.comments.values() if comment.post.id == post.id
         ]
+
+
+class MediaRepository:
+    medias: dict[int, Media] = {}
+    id_counter = count(1)
+
+    def add_midia(self, media: Media) -> int:
+        media_id = next(self.id_counter)
+        media.id = media_id
+        self.medias.update({media_id: media})
+        return media_id
+
+    def get_site_medias(self, site: Site) -> list[Media]:
+        return [media for media in self.medias.values() if media.site.id == site.id]
+
+    def remove_media(self, media_id: int):
+        self.medias.pop(media_id, None)

@@ -10,7 +10,7 @@ python main.py
 - [x] User Roles and Permissions: Foi criado um modelo de usuários com login e logout
 - [x] Content Creation and Editing: Foi criada funcionalidade de criar um Site e para cada Site, pode-se criar Posts
 - [x] Comment and Review System: Foi criado sistema de comentários. Um usuário pode comentar num Post de um Site.
-- [ ] Media Library Management
+- [x] Media Library Management
 - [x] Content Scheduling
 - [ ] Analytics and Reporting
 - [ ] Template and Design Customization

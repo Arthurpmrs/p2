@@ -1,15 +1,17 @@
-from datetime import datetime
 import os
+from datetime import datetime
 from typing import Callable, TypedDict
+from pathlib import Path
 
-from cms.models import Comment, Post, Site, User, UserRole
+from cms.models import Comment, Media, Post, Site, User, UserRole
 from cms.repository import (
     CommentRepository,
+    MediaRepository,
     PostRepository,
     SiteRepository,
     UserRepository,
 )
-from cms.utils import read_datetime_from_cli
+from cms.utils import infer_media_type, read_datetime_from_cli
 
 
 MenuOptions = TypedDict(
@@ -21,16 +23,19 @@ class Menu:
     logged_user: User | None
     selected_site: Site | None
     selected_post: Post | None
+    selected_media: Media | None
 
     def __init__(self):
         self.user_repo = UserRepository()
         self.site_repo = SiteRepository()
         self.post_repo = PostRepository()
         self.comment_repo = CommentRepository()
+        self.media_repo = MediaRepository()
         self._populate()
         self.logged_user = None
         self.selected_site = None
         self.selected_post = None
+        self.selected_media = None
 
     def show(self):
         try:
@@ -99,8 +104,14 @@ class Menu:
         ]
 
         if self.logged_user.username == self.selected_site.owner.username:
-            options.append(
-                {"message": "Criar post no site", "function": self.create_site_post},
+            options.extend(
+                [
+                    {
+                        "message": "Criar post no site",
+                        "function": self.create_site_post,
+                    },
+                    {"message": "Biblioteca de Mídias", "function": self.media_menu},
+                ]
             )
 
         while True:
@@ -153,6 +164,44 @@ class Menu:
             print(" ")
 
             print("Opções para o post ")
+            for i, option in enumerate(options):
+                print(f"{i + 1}. {option['message']}")
+            print("0. Voltar")
+            print(" ")
+
+            try:
+                selected_option = int(
+                    input("Digite o número da opção para selecioná-la: ")
+                )
+            except ValueError:
+                print("Opção inválida.\n")
+                continue
+
+            if selected_option == 0:
+                return
+
+            if selected_option < 0 or selected_option > len(options):
+                print("Opção inválida.\n")
+                continue
+
+            os.system("clear")
+            options[selected_option - 1]["function"]()
+
+    def media_menu(self):
+        if not self.logged_user or not self.selected_site:
+            return
+
+        if not self.logged_user.username == self.selected_site.owner.username:
+            return
+
+        options: list[MenuOptions] = [
+            {"message": "Importar nova mídia", "function": self.import_media},
+            {"message": "Listar mídias", "function": self.select_media},
+        ]
+
+        while True:
+            os.system("clear")
+            print(f"Biblioteca de mídias do site '{self.selected_site.name}'")
             for i, option in enumerate(options):
                 print(f"{i + 1}. {option['message']}")
             print("0. Voltar")
@@ -288,8 +337,6 @@ class Menu:
         print(" ")
         input("Post criado. Clique Enter para voltar ao menu.")
 
-    from datetime import datetime
-
     def select_post(self):
         if not self.selected_site:
             return
@@ -349,6 +396,151 @@ class Menu:
         print(" ")
         input("Clique Enter para voltar ao Menu.")
 
+    def media_detail_menu(self):
+        if not self.selected_media:
+            return
+
+        options: list[MenuOptions] = [
+            {"message": "Deletar mídia", "function": self.delete_selected_media},
+        ]
+
+        while True:
+            os.system("clear")
+            media = self.selected_media
+            print(f"Informações da mídia '{media.filename}':")
+            print(f"ID: {media.id}")
+            print(f"Tipo: {media.media_type.name}")
+            print(f"Caminho: {media.path}")
+            print(" ")
+
+            for i, option in enumerate(options):
+                print(f"{i + 1}. {option['message']}")
+            print("0. Voltar")
+            print(" ")
+
+            try:
+                selected_option = int(
+                    input("Digite o número da opção para selecioná-la: ")
+                )
+            except ValueError:
+                print("Opção inválida.\n")
+                continue
+
+            if selected_option == 0:
+                return
+
+            if selected_option < 0 or selected_option > len(options):
+                print("Opção inválida.\n")
+                continue
+
+            os.system("clear")
+            options[selected_option - 1]["function"]()
+
+            if not self.selected_media:
+                return
+
+    def import_media(self):
+        if not self.selected_site:
+            return
+
+        filepath = input(
+            "Digite o caminho completo do arquivo de mídia a ser importado:\n> "
+        ).strip()
+
+        if not filepath:
+            print("Nenhum caminho informado.")
+            input("Clique Enter para voltar.")
+            return
+
+        path = Path(filepath)
+
+        if not path.exists():
+            print("Arquivo não encontrado. Verifique o caminho digitado.")
+            input("Clique Enter para voltar.")
+            return
+
+        path = Path(filepath)
+        filename = path.name
+
+        try:
+            media_type = infer_media_type(path.suffix)
+
+            media = Media(
+                filename=filename,
+                path=path,
+                media_type=media_type,
+                site=self.selected_site,
+            )
+
+            media_id = self.media_repo.add_midia(media)
+            print(f"Mídia importada com id {media_id}.")
+
+            input("Clique Enter para voltar ao menu.")
+        except ValueError:
+            print("Arquivo não suportado.")
+            input("Clique Enter para voltar ao menu e tentar novamente.")
+
+    def select_media(self):
+        if not self.selected_site:
+            return
+
+        medias: list[Media] = self.media_repo.get_site_medias(self.selected_site)
+
+        if not medias:
+            print("Nenhuma mídia encontrada para este site.")
+            input("Clique Enter para voltar ao menu.")
+            return
+
+        while True:
+            os.system("clear")
+            print(f"Mídias do site '{self.selected_site.name}':")
+            for i, media in enumerate(medias):
+                print(f"{i + 1}. {media.filename}")
+            print("0. Voltar")
+            print(" ")
+
+            try:
+                selected_option = int(
+                    input("Digite o número da mídia para selecioná-la: ")
+                )
+            except ValueError:
+                print("Opção inválida.\n")
+                continue
+
+            if selected_option == 0:
+                return
+
+            if selected_option < 0 or selected_option > len(medias):
+                print("Opção inválida.\n")
+                continue
+
+            self.selected_media = medias[selected_option - 1]
+            break
+
+        self.media_detail_menu()
+        self.selected_media = None
+
+    def delete_selected_media(self):
+        if not self.selected_media:
+            return
+
+        confirm = (
+            input(
+                f"Tem certeza que deseja deletar a mídia '{self.selected_media.filename}'? (y/n): "
+            )
+            .strip()
+            .lower()
+        )
+        if confirm == "y":
+            self.media_repo.remove_media(self.selected_media.id)
+            print("Mídia deletada.")
+            input("Clique Enter para voltar ao menu.")
+            self.selected_media = None
+            return
+        else:
+            print("Operação cancelada.")
+            input("Clique Enter para voltar ao menu.")
+
     def _populate(self):
         admin = User(
             first_name="Admin",
@@ -401,3 +593,21 @@ class Menu:
         self.comment_repo.add_comment(comment1_post1)
         self.comment_repo.add_comment(comment2_post1)
         self.comment_repo.add_comment(comment3_post1)
+
+        self._populate_medias(site)
+
+    def _populate_medias(self, selected_site: Site):
+        folder = Path("static")
+        for filepath in folder.rglob("*"):
+            if filepath.is_file():
+                filepath = filepath.resolve()
+                media_type = infer_media_type(filepath.suffix)
+
+                self.media_repo.add_midia(
+                    Media(
+                        filename=filepath.name,
+                        path=filepath,
+                        media_type=media_type,
+                        site=selected_site,
+                    )
+                )

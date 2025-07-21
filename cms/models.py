@@ -1,11 +1,17 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 
 
 class UserRole(Enum):
     ADMIN = 1
     USER = 2
+
+
+class MediaType(Enum):
+    IMAGE = 1
+    VIDEO = 2
 
 
 @dataclass
@@ -47,3 +53,12 @@ class Comment:
     commenter: User
     body: str
     created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class Media:
+    id: int = field(init=False)
+    filename: str
+    path: Path
+    media_type: MediaType
+    site: Site

@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from cms.models import MediaType
+
 
 def read_datetime_from_cli() -> datetime:
     while True:
@@ -14,3 +16,13 @@ def read_datetime_from_cli() -> datetime:
             return scheduled_datetime
         except ValueError:
             print("Formato de data ou hora inválido. Tente novamente.\n")
+
+
+def infer_media_type(extension: str) -> MediaType:
+    ext = extension.lower()
+    if ext in [".jpg", ".jpeg", ".png", ".gif", "webp"]:
+        return MediaType.IMAGE
+    elif ext in [".mp4", ".mov", ".avi"]:
+        return MediaType.VIDEO
+    else:
+        raise ValueError("Tipo do arquivo de mídia não é suportado.")
