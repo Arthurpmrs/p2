@@ -98,5 +98,8 @@ class MediaRepository:
     def get_site_medias(self, site: Site) -> list[Media]:
         return [media for media in self.medias.values() if media.site.id == site.id]
 
+    def get_media_by_id(self, media_id: int) -> Media:
+        return self.medias[media_id]
+
     def remove_media(self, media_id: int):
         self.medias.pop(media_id, None)

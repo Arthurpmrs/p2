@@ -1,9 +1,10 @@
 import os
-from datetime import datetime
 from typing import Callable, TypedDict
 from pathlib import Path
 
-from cms.models import Comment, Media, Post, Site, User, UserRole
+from cms.models import Comment, Media, MediaBlock, Post, Site, TextBlock, User, UserRole
+from cms.post_builder import PostBuilder
+from cms.post_translator import PostTranslator
 from cms.repository import (
     CommentRepository,
     MediaRepository,
@@ -11,7 +12,7 @@ from cms.repository import (
     SiteRepository,
     UserRepository,
 )
-from cms.utils import infer_media_type, read_datetime_from_cli
+from cms.utils import infer_media_type
 
 
 MenuOptions = TypedDict(
@@ -24,6 +25,7 @@ class Menu:
     selected_site: Site | None
     selected_post: Post | None
     selected_media: Media | None
+    selected_post_language: str | None
 
     def __init__(self):
         self.user_repo = UserRepository()
@@ -36,6 +38,7 @@ class Menu:
         self.selected_site = None
         self.selected_post = None
         self.selected_media = None
+        self.selected_post_language = None
 
     def show(self):
         try:
@@ -144,24 +147,30 @@ class Menu:
         if not self.logged_user or not self.selected_post:
             return
 
+        self.selected_post_language = self.selected_post.default_language
+
         options: list[MenuOptions] = [
             {
                 "message": "Listar comentários do post",
                 "function": self.show_post_comments,
             },
             {"message": "Comentar no post", "function": self.comment_on_post},
+            {"message": "Trocar idioma do post", "function": self.change_post_language},
         ]
+
+        if self.logged_user.username == self.selected_post.poster.username:
+            options.extend(
+                [
+                    {
+                        "message": "Traduzir post",
+                        "function": self.translate_post,
+                    },
+                ]
+            )
 
         while True:
             os.system("clear")
-            print(self.selected_post.title)
-            print(f"Data de criação: {self.selected_post.created_at}")
-            print(" ")
-            print(self.selected_post.body)
-            print(" ")
-            print(f"Criado por: {self.selected_post.poster.username}")
-            print(" ")
-            print(" ")
+            self.selected_post.display_post(self.selected_post_language)
 
             print("Opções para o post ")
             for i, option in enumerate(options):
@@ -313,25 +322,11 @@ class Menu:
         self.selected_site = None
 
     def create_site_post(self):
-        if not self.selected_site:
+        if not self.selected_site or not self.logged_user:
             return
 
-        title = input("Digite o título do post: ")
-        body = input("Digite o conteúdo do post: ")
-        is_scheduled = input("Deseja agendar o post? (y/n) ")
-
-        if is_scheduled.strip().lower() == "y":
-            scheduled_to = read_datetime_from_cli()
-        else:
-            scheduled_to = datetime.now()
-
-        post = Post(
-            poster=self.selected_site.owner,
-            site=self.selected_site,
-            title=title,
-            body=body,
-            scheduled_to=scheduled_to,
-        )
+        pb = PostBuilder(self.selected_site, self.logged_user, self.media_repo)
+        post = pb.build_post()
         self.post_repo.add_post(post)
 
         print(" ")
@@ -343,7 +338,7 @@ class Menu:
 
         posts: list[Post] = self.post_repo.get_site_posts(self.selected_site)
         for i, post in enumerate(posts):
-            print(f"{i + 1}. {post.title}")
+            print(f"{i + 1}. {post.get_default_title()}")
         print("0. Voltar")
         print(" ")
 
@@ -395,6 +390,56 @@ class Menu:
 
         print(" ")
         input("Clique Enter para voltar ao Menu.")
+
+    def translate_post(self):
+        if not self.selected_post:
+            return
+
+        pt = PostTranslator(self.selected_post)
+        pt.translate()
+
+    def change_post_language(self):
+        if not self.selected_post:
+            return
+
+        languages = list(self.selected_post.post_content_by_language.keys())
+        if len(languages) == 1:
+            os.system("clear")
+            input(
+                f"O Post só tem uma linguagem ({languages[0]}). Clique enter para voltar."
+            )
+            return
+
+        while True:
+            os.system("clear")
+
+            print("Opções de idioma para o post: ")
+            for i, lang in enumerate(languages):
+                print(f"{i + 1}. {lang}")
+            print("0. Voltar")
+            print(" ")
+
+            try:
+                selected_option = int(
+                    input("Digite o número da opção para selecioná-la: ")
+                )
+            except ValueError:
+                print("Opção inválida.\n")
+                continue
+
+            if selected_option == 0:
+                return
+
+            if selected_option < 0 or selected_option > len(languages):
+                print("Opção inválida.\n")
+                continue
+
+            self.selected_post_language = languages[selected_option - 1]
+            print(" ")
+            input(
+                f"Idioma {self.selected_post_language} selecionado. Clique enter para voltar."
+            )
+            break
 
     def media_detail_menu(self):
         if not self.selected_media:
@@ -571,18 +616,83 @@ class Menu:
         self.user_repo.add_user(user2)
         site = Site(owner=admin, name="Meu blog")
         self.site_repo.add_site(site)
-
+        self._populate_medias(site)
         post1 = Post(
             poster=admin,
             site=site,
-            title="Título do meu post",
-            body="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+            default_language="br",
+            post_content_by_language={
+                "br": {
+                    "title": "Título do meu post",
+                    "body": [
+                        TextBlock(
+                            order=1,
+                            language="br",
+                            text="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+                        ),
+                        MediaBlock(
+                            order=2,
+                            language="br",
+                            alt="Uma imagem.",
+                            media=self.media_repo.get_media_by_id(1),
+                        ),
+                        TextBlock(
+                            order=3,
+                            language="br",
+                            text="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+                        ),
+                    ],
+                },
+                "en": {
+                    "title": "Super duper title of doom",
+                    "body": [
+                        TextBlock(
+                            order=1,
+                            language="br",
+                            text="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+                        ),
+                        MediaBlock(
+                            order=2,
+                            language="br",
+                            alt="Some Imagee.",
+                            media=self.media_repo.get_media_by_id(1),
+                        ),
+                        TextBlock(
+                            order=3,
+                            language="br",
+                            text="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+                        ),
+                    ],
+                },
+            },
         )
         post2 = Post(
             poster=admin,
             site=site,
-            title="Título do meu segundo post",
-            body="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+            default_language="en",
+            post_content_by_language={
+                "en": {
+                    "title": "Title of my post",
+                    "body": [
+                        TextBlock(
+                            order=1,
+                            language="en",
+                            text="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+                        ),
+                        MediaBlock(
+                            order=2,
+                            language="en",
+                            alt="Some video",
+                            media=self.media_repo.get_media_by_id(5),
+                        ),
+                        TextBlock(
+                            order=3,
+                            language="en",
+                            text="Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.",
+                        ),
+                    ],
+                }
+            },
         )
         self.post_repo.add_post(post1)
         self.post_repo.add_post(post2)
@@ -593,8 +703,6 @@ class Menu:
         self.comment_repo.add_comment(comment1_post1)
         self.comment_repo.add_comment(comment2_post1)
         self.comment_repo.add_comment(comment3_post1)
-
-        self._populate_medias(site)
 
     def _populate_medias(self, selected_site: Site):
         folder = Path("static")

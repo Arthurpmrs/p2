@@ -6,7 +6,7 @@ Projeto da disciplina de Projeto de Software
 python main.py
 ```
 
-## Funcionalidades implementadas até o dia 20/07/2025
+## Funcionalidades implementadas até o dia 23/07/2025
 - [x] User Roles and Permissions: Foi criado um modelo de usuários com login e logout
 - [x] Content Creation and Editing: Foi criada funcionalidade de criar um Site e para cada Site, pode-se criar Posts
 - [x] Comment and Review System: Foi criado sistema de comentários. Um usuário pode comentar num Post de um Site.
@@ -15,5 +15,5 @@ python main.py
 - [ ] Analytics and Reporting
 - [ ] Template and Design Customization
 - [ ] SEO Optimization Tools
-- [ ] Multi-Language Support
+- [x] Multi-Language Support
 - [ ] Social Media Integration
