@@ -16,4 +16,4 @@ python main.py
 - [ ] Template and Design Customization
 - [ ] SEO Optimization Tools
 - [x] Multi-Language Support
-- [ ] Social Media Integration
+- [x] Social Media Integration
