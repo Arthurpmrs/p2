@@ -23,6 +23,13 @@ class SocialNetwork(Enum):
     LINKEDIN = "LinkedIn"
 
 
+class SiteTemplate(Enum):
+    TOP_POSTS_FIRST = "Posts mais vistos"
+    TOP_COMMENTS_FIRST = "Posts mais comentados"
+    LATEST_POSTS = "Últimos posts"
+    FOCUS_ON_MEDIA = "Galeria de mídia"
+
+
 PostContent = TypedDict("PostContent", {"title": str, "body": list["PostBlock"]})
 
 type Language = str
@@ -44,6 +51,8 @@ class Site:
     id: int = field(init=False)
     owner: User
     name: str
+    description: str
+    template: SiteTemplate = SiteTemplate.LATEST_POSTS
 
     def get_url(self) -> str:
         domain = self.name.lower().replace(" ", "-")
@@ -120,9 +129,9 @@ class Post:
         return self.scheduled_to >= datetime.now()
 
     def display_post(self, language: str | None = None):
-        content = self._get_content_by_language(language)
+        content, lang = self._get_content_by_language(language)
 
-        print(f"[{language}] ", content["title"])
+        print(f"[{lang}] ", content["title"])
         print(f"Data de criação: {self.created_at}")
         print(" ")
         for block in content["body"]:
@@ -133,15 +142,15 @@ class Post:
         print(" ")
 
     def display_post_short(self, language: str | None = None):
-        content = self._get_content_by_language(language)
+        content, lang = self._get_content_by_language(language)
 
-        print(f"[{language}] ", content["title"])
+        print(f"[{lang}] ", content["title"])
         print(f"{self.poster.username}@{self.created_at}")
         print(" ")
 
     def format_post_to_social_network(self, language: str | None = None) -> str:
         SIZE_LIMIT = 100
-        content = self._get_content_by_language(language)
+        content, lang = self._get_content_by_language(language)
 
         block_to_display = None
         for block in content["body"]:
@@ -149,7 +158,7 @@ class Post:
                 block_to_display = block
                 break
 
-        s = f"[{language}] {content['title']}\n"
+        s = f"[{lang}] {content['title']}\n"
         s += f"{self.poster.username}@{self.created_at}\n"
         s += "\n"
 
@@ -162,11 +171,19 @@ class Post:
 
         return s
 
-    def _get_content_by_language(self, language: str | None = None) -> PostContent:
+    def display_first_post_image(self):
+        for block in self.post_content_by_language[self.default_language]["body"]:
+            if isinstance(block, MediaBlock):
+                block.display_content()
+                return
+
+    def _get_content_by_language(
+        self, language: str | None = None
+    ) -> tuple[PostContent, Language]:
         if not language:
             language = self.default_language
 
-        return self.post_content_by_language[language]
+        return self.post_content_by_language[language], language
 
     def get_default_title(self) -> str:
         if len(self.post_content_by_language) == 0:

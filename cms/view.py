@@ -12,6 +12,7 @@ from cms.models import (
     Site,
     SiteAction,
     SiteAnalyticsEntry,
+    SiteTemplate,
     TextBlock,
     User,
     UserRole,
@@ -146,12 +147,16 @@ class Menu:
                         "message": "Ver estatísticas do site",
                         "function": self.show_site_analytics,
                     },
+                    {
+                        "message": "Mudar template do site",
+                        "function": self.configure_site_template,
+                    },
                 ]
             )
 
         while True:
             os.system("clear")
-            print(f"Opções para o site '{self.selected_site.name}'")
+            self.display_site(self.selected_site)
             for i, option in enumerate(options):
                 print(f"{i + 1}. {option['message']}")
             print("0. Voltar")
@@ -335,7 +340,8 @@ class Menu:
             return
 
         site_name = input("Diga o nome do seu site: ")
-        site = Site(owner=self.logged_user, name=site_name)
+        description = input("Informe uma descrição breve para o site: ")
+        site = Site(owner=self.logged_user, name=site_name, description=description)
         self.site_repo.add_site(site)
 
         input("Site criado. Clique Enter para voltar ao menu.")
@@ -350,6 +356,51 @@ class Menu:
 
         print(" ")
         input("Clique Enter para voltar ao Menu.")
+
+    def display_site(self, site: Site):
+        print(f"<========== {site.name} ==========>")
+        print(site.description)
+        print(" ")
+
+        if site.template == SiteTemplate.TOP_POSTS_FIRST:
+            print(f"{site.template.value}:")
+            posts = sorted(
+                self.post_repo.get_site_posts(site),
+                key=lambda p: self.analytics_repo.get_post_views(p.id),
+                reverse=True,
+            )
+        elif site.template == SiteTemplate.TOP_COMMENTS_FIRST:
+            print(f"{site.template.value}:")
+            posts = sorted(
+                self.post_repo.get_site_posts(site),
+                key=lambda p: self.analytics_repo.get_post_comments(p.id),
+                reverse=True,
+            )
+        elif site.template == SiteTemplate.FOCUS_ON_MEDIA:
+            print(f"{site.template.value}:")
+            posts = [
+                p
+                for p in self.post_repo.get_site_posts(site)
+                if any(
+                    isinstance(b, MediaBlock)
+                    for b in p.post_content_by_language[p.default_language]["body"]
+                )
+            ]
+        else:
+            print(f"{site.template.value}:")
+            posts = sorted(
+                self.post_repo.get_site_posts(site),
+                key=lambda p: p.created_at,
+                reverse=True,
+            )
+
+        for post in posts[:3]:
+            if site.template == SiteTemplate.FOCUS_ON_MEDIA:
+                post.display_first_post_image()
+            else:
+                post.display_post_short()
+
+        print(" ")
 
     def select_site(self):
         if not self.logged_user:
@@ -433,6 +484,36 @@ class Menu:
 
         print(" ")
         input("Clique Enter para voltar ao Menu.")
+
+    def configure_site_template(self):
+        if not self.selected_site:
+            return
+
+        print("Escolha o layout de apresentação do site:")
+        for i, t in enumerate(SiteTemplate):
+            print(f"{i + 1}. {t.value}")
+        print("0. Voltar")
+        print(" ")
+
+        try:
+            selected_option = int(input("Digite a opção desejada: "))
+
+            if selected_option == 0:
+                return
+
+            if selected_option < 0 or selected_option > len(SiteTemplate):
+                raise ValueError
+
+            new_template = list(SiteTemplate)[selected_option - 1]
+            self.selected_site.template = new_template
+
+            print(f"Template atualizado para: {new_template.value}")
+        except (ValueError, KeyError):
+            print("Opção inválida.")
+
+        print(" ")
+        print(" ")
+        input("Clique enter para voltar ao menu.")
 
     def select_post(self):
         if not self.selected_site or not self.logged_user:
@@ -852,7 +933,9 @@ class Menu:
             role=UserRole.USER,
         )
         self.user_repo.add_user(user2)
-        site = Site(owner=admin, name="Meu blog")
+        site = Site(
+            owner=admin, name="Meu blog", description="Meus pensamentos e dia-a-dia."
+        )
         self.site_repo.add_site(site)
         self._populate_medias(admin, site)
         post1 = Post(

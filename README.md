@@ -13,7 +13,7 @@ python main.py
 - [x] Media Library Management
 - [x] Content Scheduling
 - [x] Analytics and Reporting
-- [ ] Template and Design Customization
+- [x] Template and Design Customization
 - [x] SEO Optimization Tools
 - [x] Multi-Language Support
 - [x] Social Media Integration
