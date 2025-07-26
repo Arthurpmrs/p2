@@ -307,7 +307,7 @@ class Menu:
             if limit == 0:
                 return
 
-            self.analytics_repo.show_logs()
+            self.analytics_repo.show_logs(limit=limit)
 
         except ValueError:
             print("Valor inválido.")
