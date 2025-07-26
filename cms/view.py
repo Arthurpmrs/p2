@@ -15,6 +15,7 @@ from cms.models import (
     TextBlock,
     User,
     UserRole,
+    SocialNetwork,
 )
 from cms.post_builder import PostBuilder
 from cms.post_translator import PostTranslator
@@ -186,6 +187,7 @@ class Menu:
             },
             {"message": "Comentar no post", "function": self.comment_on_post},
             {"message": "Trocar idioma do post", "function": self.change_post_language},
+            {"message": "Compartilhar post", "function": self.share_post},
         ]
 
         if self.logged_user.username == self.selected_post.poster.username:
@@ -570,6 +572,56 @@ class Menu:
                 f"Idioma {self.selected_post_language} selecionado. Clique enter para voltar."
             )
             break
+
+    def share_post(self):
+        if not self.selected_post or not self.logged_user or not self.selected_site:
+            return
+
+        print("Preview do post para Rede Social:")
+        print(" ")
+        print(self.selected_post.format_post_to_social_network())
+        print(" ")
+
+        print("Selecione as redes sociais para compartilhar:")
+
+        for i, network in enumerate(SocialNetwork):
+            print(f"{i + 1}. {network.value}")
+        print("0. Voltar")
+
+        selected_indexes = input(
+            "\nDigite os números separados por vírgula (ex: 1,3): "
+        ).split(",")
+
+        for idx in selected_indexes:
+            idx = idx.strip()
+
+            if not idx.isdigit():
+                continue
+
+            n = int(idx)
+
+            if n == 0:
+                return
+
+            if n < 0 or n > len(SocialNetwork):
+                print("Opção inválida.\n")
+                continue
+
+            if 1 <= n <= len(SocialNetwork):
+                network = list(SocialNetwork)[n - 1]
+                print(f"Post compartilhado em {network.value}.")
+                self.analytics_repo.log(
+                    PostAnalyticsEntry(
+                        user=self.logged_user,
+                        site=self.selected_site,
+                        post=self.selected_post,
+                        action=PostAction.SHARE,
+                        metadata={"shared_to": network.value},
+                    )
+                )
+
+        print(" ")
+        input("Clique Enter para voltar ao menu.")
 
     def media_detail_menu(self):
         if not self.selected_media:

@@ -16,6 +16,13 @@ class MediaType(Enum):
     VIDEO = 2
 
 
+class SocialNetwork(Enum):
+    TWITTER = "Twitter"
+    FACEBOOK = "Facebook"
+    INSTAGRAM = "Instagram"
+    LINKEDIN = "LinkedIn"
+
+
 PostContent = TypedDict("PostContent", {"title": str, "body": list["PostBlock"]})
 
 type Language = str
@@ -38,6 +45,10 @@ class Site:
     owner: User
     name: str
 
+    def get_url(self) -> str:
+        domain = self.name.lower().replace(" ", "-")
+        return f"www.cms.{domain}.com.br"
+
 
 @dataclass
 class Media:
@@ -58,14 +69,21 @@ class PostBlock(ABC):
     def display_content(self):
         pass
 
+    @abstractmethod
+    def get_content(self) -> str:
+        pass
+
 
 @dataclass
 class TextBlock(PostBlock):
     text: str
 
     def display_content(self):
-        print(f"<p>{self.text}</p>")
+        print(self.get_content())
         print(" ")
+
+    def get_content(self) -> str:
+        return f"<p>{self.text}</p>"
 
 
 @dataclass
@@ -74,11 +92,18 @@ class MediaBlock(PostBlock):
     alt: str
 
     def display_content(self):
-        if self.media.media_type == MediaType.IMAGE:
-            print(f"<Img src='{self.media.filename}' alt='{self.alt}' />")
-        else:
-            print(f"<Video src='{self.media.filename}' alt='{self.alt}' />")
+        print(self.get_content())
         print(" ")
+
+    def get_content(self) -> str:
+        content = ""
+
+        if self.media.media_type == MediaType.IMAGE:
+            content = f"<Img src='{self.media.filename}' alt='{self.alt}' />"
+        else:
+            content = f"<Video src='{self.media.filename}' alt='{self.alt}' />"
+
+        return content
 
 
 @dataclass
@@ -95,10 +120,7 @@ class Post:
         return self.scheduled_to >= datetime.now()
 
     def display_post(self, language: str | None = None):
-        if not language:
-            language = self.default_language
-
-        content = self.post_content_by_language[language]
+        content = self._get_content_by_language(language)
 
         print(f"[{language}] ", content["title"])
         print(f"Data de criação: {self.created_at}")
@@ -111,14 +133,40 @@ class Post:
         print(" ")
 
     def display_post_short(self, language: str | None = None):
-        if not language:
-            language = self.default_language
-
-        content = self.post_content_by_language[language]
+        content = self._get_content_by_language(language)
 
         print(f"[{language}] ", content["title"])
         print(f"{self.poster.username}@{self.created_at}")
         print(" ")
+
+    def format_post_to_social_network(self, language: str | None = None) -> str:
+        SIZE_LIMIT = 100
+        content = self._get_content_by_language(language)
+
+        block_to_display = None
+        for block in content["body"]:
+            if isinstance(block, TextBlock):
+                block_to_display = block
+                break
+
+        s = f"[{language}] {content['title']}\n"
+        s += f"{self.poster.username}@{self.created_at}\n"
+        s += "\n"
+
+        if block_to_display:
+            s += block_to_display.get_content()[:SIZE_LIMIT]
+            s += "\n" if len(block_to_display.get_content()) < SIZE_LIMIT else "...\n"
+
+        s += "\n"
+        s += f"Veja o post completo em: {self.site.get_url()}\n"
+
+        return s
+
+    def _get_content_by_language(self, language: str | None = None) -> PostContent:
+        if not language:
+            language = self.default_language
+
+        return self.post_content_by_language[language]
 
     def get_default_title(self) -> str:
         if len(self.post_content_by_language) == 0:
