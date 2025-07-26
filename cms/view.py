@@ -27,6 +27,7 @@ from cms.repository import (
     SiteRepository,
     UserRepository,
 )
+from cms.seo_analyzier import display_seo_report
 from cms.utils import infer_media_type
 
 
@@ -200,6 +201,10 @@ class Menu:
                     {
                         "message": "Ver estatísticas do post",
                         "function": self.show_post_analytics,
+                    },
+                    {
+                        "message": "Ver relatório de análise de SEO",
+                        "function": self.show_seo_report,
                     },
                 ]
             )
@@ -572,6 +577,48 @@ class Menu:
                 f"Idioma {self.selected_post_language} selecionado. Clique enter para voltar."
             )
             break
+
+    def show_seo_report(self):
+        if not self.selected_post:
+            return
+
+        language = ""
+
+        languages = list(self.selected_post.post_content_by_language.keys())
+        if len(languages) == 1:
+            language = languages[0]
+
+        while True:
+            os.system("clear")
+
+            print("Opções de idioma para o post: ")
+            for i, lang in enumerate(languages):
+                print(f"{i + 1}. {lang}")
+            print("0. Voltar")
+            print(" ")
+
+            try:
+                selected_option = int(
+                    input("Digite o número da opção para selecioná-la: ")
+                )
+            except ValueError:
+                print("Opção inválida.\n")
+                continue
+
+            if selected_option == 0:
+                return
+
+            if selected_option < 0 or selected_option > len(languages):
+                print("Opção inválida.\n")
+                continue
+
+            language = languages[selected_option - 1]
+            break
+
+        display_seo_report(self.selected_post, language)
+
+        print(" ")
+        input("Clique Enter para voltar ao menu.")
 
     def share_post(self):
         if not self.selected_post or not self.logged_user or not self.selected_site:
