@@ -1,6 +1,17 @@
 from datetime import datetime
 from itertools import count
-from cms.models import Comment, Media, Post, Site, User
+from cms.models import (
+    AnalyticsEntry,
+    Comment,
+    Media,
+    Post,
+    PostAction,
+    PostAnalyticsEntry,
+    Site,
+    SiteAction,
+    SiteAnalyticsEntry,
+    User,
+)
 
 
 class UserRepository:
@@ -30,6 +41,84 @@ class UserRepository:
 
     def delete_user(self, user_id: int):
         self.users.pop(user_id)
+
+
+class AnalyticsRepository:
+    id_counter = count(1)
+    entries: dict[int, AnalyticsEntry] = {}
+
+    def log(self, entry: AnalyticsEntry) -> int:
+        entry_id = next(self.id_counter)
+        entry.id = entry_id
+        self.entries.update({entry_id: entry})
+        return entry_id
+
+    def show_logs(self, limit: int = 5):
+        entries = sorted([e for e in self.entries.values()], key=lambda x: x.created_at)
+        for entry in entries[-limit:]:
+            entry.display_log()
+
+    def get_site_accesses(self, site_id: int) -> int:
+        return self._get_site_info_by_action(site_id, SiteAction.ACCESS)
+
+    def get_site_post_creation_count(self, site_id: int) -> int:
+        return self._get_site_info_by_action(site_id, SiteAction.CREATE_POST)
+
+    def get_site_media_upload_count(self, site_id: int) -> int:
+        return self._get_site_info_by_action(site_id, SiteAction.UPLOAD_MEDIA)
+
+    def _get_site_info_by_action(self, site_id: int, action: SiteAction) -> int:
+        return len(
+            [
+                entry
+                for entry in self.entries.values()
+                if isinstance(entry, SiteAnalyticsEntry)
+                and entry.action == action
+                and site_id == entry.site.id
+            ]
+        )
+
+    def get_site_total_post_views(self, site_id: int) -> int:
+        return self._get_site_total_post_info_by_action(site_id, PostAction.VIEW)
+
+    def get_site_total_post_shares(self, site_id: int) -> int:
+        return self._get_site_total_post_info_by_action(site_id, PostAction.SHARE)
+
+    def get_site_total_post_comments(self, site_id: int) -> int:
+        return self._get_site_total_post_info_by_action(site_id, PostAction.COMMENT)
+
+    def _get_site_total_post_info_by_action(
+        self, site_id: int, action: PostAction
+    ) -> int:
+        return len(
+            [
+                entry
+                for entry in self.entries.values()
+                if isinstance(entry, PostAnalyticsEntry)
+                and entry.action == action
+                and site_id == entry.site.id
+            ]
+        )
+
+    def get_post_views(self, post_id: int) -> int:
+        return self._get_post_info_by_action(post_id, PostAction.VIEW)
+
+    def get_post_shares(self, post_id: int) -> int:
+        return self._get_post_info_by_action(post_id, PostAction.SHARE)
+
+    def get_post_comments(self, post_id: int) -> int:
+        return self._get_post_info_by_action(post_id, PostAction.COMMENT)
+
+    def _get_post_info_by_action(self, post_id: int, action: PostAction) -> int:
+        return len(
+            [
+                entry
+                for entry in self.entries.values()
+                if isinstance(entry, PostAnalyticsEntry)
+                and entry.action == action
+                and post_id == entry.post.id
+            ]
+        )
 
 
 class SiteRepository:

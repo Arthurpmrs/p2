@@ -2,10 +2,24 @@ import os
 from typing import Callable, TypedDict
 from pathlib import Path
 
-from cms.models import Comment, Media, MediaBlock, Post, Site, TextBlock, User, UserRole
+from cms.models import (
+    Comment,
+    Media,
+    MediaBlock,
+    Post,
+    PostAction,
+    PostAnalyticsEntry,
+    Site,
+    SiteAction,
+    SiteAnalyticsEntry,
+    TextBlock,
+    User,
+    UserRole,
+)
 from cms.post_builder import PostBuilder
 from cms.post_translator import PostTranslator
 from cms.repository import (
+    AnalyticsRepository,
     CommentRepository,
     MediaRepository,
     PostRepository,
@@ -33,6 +47,7 @@ class Menu:
         self.post_repo = PostRepository()
         self.comment_repo = CommentRepository()
         self.media_repo = MediaRepository()
+        self.analytics_repo = AnalyticsRepository()
         self._populate()
         self.logged_user = None
         self.selected_site = None
@@ -66,6 +81,17 @@ class Menu:
                     },
                     {"message": "Fazer logout", "function": self.logout},
                 ]
+
+                if self.logged_user.role == UserRole.ADMIN:
+                    options.extend(
+                        [
+                            {
+                                "message": "Ver logs do sistema",
+                                "function": self.show_logs,
+                            },
+                        ]
+                    )
+
             else:
                 options: list[MenuOptions] = [
                     {
@@ -114,6 +140,10 @@ class Menu:
                         "function": self.create_site_post,
                     },
                     {"message": "Biblioteca de Mídias", "function": self.media_menu},
+                    {
+                        "message": "Ver estatísticas do site",
+                        "function": self.show_site_analytics,
+                    },
                 ]
             )
 
@@ -164,6 +194,10 @@ class Menu:
                     {
                         "message": "Traduzir post",
                         "function": self.translate_post,
+                    },
+                    {
+                        "message": "Ver estatísticas do post",
+                        "function": self.show_post_analytics,
                     },
                 ]
             )
@@ -261,6 +295,24 @@ class Menu:
     def logout(self):
         self.logged_user = None
 
+    def show_logs(self):
+        try:
+            os.system("clear")
+            limit = int(
+                input("Insira a quantidade de logs que deseja ver (ou 0 para voltar): ")
+            )
+
+            if limit == 0:
+                return
+
+            self.analytics_repo.show_logs()
+
+        except ValueError:
+            print("Valor inválido.")
+
+        print(" ")
+        input("Clique Enter para voltar ao menu.")
+
     def show_profile(self):
         if self.logged_user:
             print(f"Nome: {self.logged_user.first_name} {self.logged_user.last_name}")
@@ -293,6 +345,9 @@ class Menu:
         input("Clique Enter para voltar ao Menu.")
 
     def select_site(self):
+        if not self.logged_user:
+            return
+
         sites: list[Site] = self.site_repo.get_sites()
         for i, site in enumerate(sites):
             print(f"{i + 1}. {site.name}")
@@ -318,6 +373,11 @@ class Menu:
             self.selected_site = sites[selected_option - 1]
             break
 
+        self.analytics_repo.log(
+            SiteAnalyticsEntry(
+                user=self.logged_user, site=self.selected_site, action=SiteAction.ACCESS
+            )
+        )
         self.site_menu()
         self.selected_site = None
 
@@ -328,12 +388,47 @@ class Menu:
         pb = PostBuilder(self.selected_site, self.logged_user, self.media_repo)
         post = pb.build_post()
         self.post_repo.add_post(post)
+        self.analytics_repo.log(
+            SiteAnalyticsEntry(
+                user=self.logged_user,
+                site=self.selected_site,
+                action=SiteAction.CREATE_POST,
+            )
+        )
 
         print(" ")
         input("Post criado. Clique Enter para voltar ao menu.")
 
-    def select_post(self):
+    def show_site_analytics(self):
         if not self.selected_site:
+            return
+
+        site = self.selected_site
+
+        accesses = self.analytics_repo.get_site_accesses(site.id)
+        post_creations = self.analytics_repo.get_site_post_creation_count(site.id)
+        media_uploads = self.analytics_repo.get_site_media_upload_count(site.id)
+
+        total_views = self.analytics_repo.get_site_total_post_views(site.id)
+        total_comments = self.analytics_repo.get_site_total_post_comments(site.id)
+        total_shares = self.analytics_repo.get_site_total_post_shares(site.id)
+
+        print("=== Estatísticas do Site ===")
+        print(f"Nome: {site.name}")
+        print(f"Acessos ao site: {accesses}")
+        print(f"Posts criados: {post_creations}")
+        print(f"Uploads de mídia: {media_uploads}")
+        print(" ")
+        print("--- Interações com os Posts ---")
+        print(f"Visualizações totais: {total_views}")
+        print(f"Comentários totais: {total_comments}")
+        print(f"Compartilhamentos totais: {total_shares}")
+
+        print(" ")
+        input("Clique Enter para voltar ao Menu.")
+
+    def select_post(self):
+        if not self.selected_site or not self.logged_user:
             return
 
         posts: list[Post] = self.post_repo.get_site_posts(self.selected_site)
@@ -361,11 +456,19 @@ class Menu:
             self.selected_post = posts[selected_option - 1]
             break
 
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=self.logged_user,
+                site=self.selected_site,
+                post=self.selected_post,
+                action=PostAction.VIEW,
+            )
+        )
         self.post_menu()
         self.selected_post = None
 
     def comment_on_post(self):
-        if not self.selected_post or not self.logged_user:
+        if not self.selected_site or not self.selected_post or not self.logged_user:
             return
 
         body = input("Digite seu comentário: ")
@@ -374,6 +477,33 @@ class Menu:
             post=self.selected_post, commenter=self.logged_user, body=body
         )
         self.comment_repo.add_comment(comment)
+
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=self.logged_user,
+                site=self.selected_site,
+                post=self.selected_post,
+                action=PostAction.COMMENT,
+                metadata={"comment_id": str(comment.id)},
+            )
+        )
+
+    def show_post_analytics(self):
+        if not self.selected_post:
+            return
+
+        views = self.analytics_repo.get_post_views(self.selected_post.id)
+        shares = self.analytics_repo.get_post_shares(self.selected_post.id)
+        comments = self.analytics_repo.get_post_comments(self.selected_post.id)
+
+        self.selected_post.display_post_short()
+
+        print(f"Visualizações: {views}")
+        print(f"Comentários: {comments}")
+        print(f"Compartilhamentos: {shares}")
+
+        print(" ")
+        input("Clique Enter para voltar ao Menu.")
 
     def show_post_comments(self):
         if not self.selected_post:
@@ -485,7 +615,7 @@ class Menu:
                 return
 
     def import_media(self):
-        if not self.selected_site:
+        if not self.selected_site or not self.logged_user:
             return
 
         filepath = input(
@@ -511,6 +641,7 @@ class Menu:
             media_type = infer_media_type(path.suffix)
 
             media = Media(
+                uploader=self.logged_user,
                 filename=filename,
                 path=path,
                 media_type=media_type,
@@ -519,6 +650,14 @@ class Menu:
 
             media_id = self.media_repo.add_midia(media)
             print(f"Mídia importada com id {media_id}.")
+
+            self.analytics_repo.log(
+                SiteAnalyticsEntry(
+                    user=self.logged_user,
+                    site=self.selected_site,
+                    action=SiteAction.UPLOAD_MEDIA,
+                )
+            )
 
             input("Clique Enter para voltar ao menu.")
         except ValueError:
@@ -616,7 +755,7 @@ class Menu:
         self.user_repo.add_user(user2)
         site = Site(owner=admin, name="Meu blog")
         self.site_repo.add_site(site)
-        self._populate_medias(site)
+        self._populate_medias(admin, site)
         post1 = Post(
             poster=admin,
             site=site,
@@ -696,6 +835,22 @@ class Menu:
         )
         self.post_repo.add_post(post1)
         self.post_repo.add_post(post2)
+        self.analytics_repo.log(
+            SiteAnalyticsEntry(
+                user=admin,
+                site=site,
+                action=SiteAction.CREATE_POST,
+                metadata={"post_id": str(post1.id)},
+            )
+        )
+        self.analytics_repo.log(
+            SiteAnalyticsEntry(
+                user=admin,
+                site=site,
+                action=SiteAction.CREATE_POST,
+                metadata={"post_id": str(post2.id)},
+            )
+        )
 
         comment1_post1 = Comment(post=post1, commenter=user1, body="Nice post bro.")
         comment2_post1 = Comment(post=post1, commenter=user2, body="Thanks!")
@@ -703,8 +858,59 @@ class Menu:
         self.comment_repo.add_comment(comment1_post1)
         self.comment_repo.add_comment(comment2_post1)
         self.comment_repo.add_comment(comment3_post1)
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=user1,
+                site=site,
+                post=post1,
+                action=PostAction.VIEW,
+            )
+        )
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=user1,
+                site=site,
+                post=post1,
+                action=PostAction.COMMENT,
+                metadata={"comment_id": str(comment1_post1.id)},
+            )
+        )
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=user2,
+                site=site,
+                post=post1,
+                action=PostAction.VIEW,
+            )
+        )
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=user2,
+                site=site,
+                post=post1,
+                action=PostAction.COMMENT,
+                metadata={"comment_id": str(comment2_post1.id)},
+            )
+        )
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=user2,
+                site=site,
+                post=post1,
+                action=PostAction.VIEW,
+            )
+        )
+        self.analytics_repo.log(
+            PostAnalyticsEntry(
+                user=user2,
+                site=site,
+                post=post1,
+                action=PostAction.COMMENT,
+                metadata={"comment_id": str(comment3_post1.id)},
+            )
+        )
 
-    def _populate_medias(self, selected_site: Site):
+    def _populate_medias(self, uploader: User, selected_site: Site):
         folder = Path("static")
         for filepath in folder.rglob("*"):
             if filepath.is_file():
@@ -713,9 +919,18 @@ class Menu:
 
                 self.media_repo.add_midia(
                     Media(
+                        uploader=uploader,
                         filename=filepath.name,
                         path=filepath,
                         media_type=media_type,
                         site=selected_site,
+                    )
+                )
+
+                self.analytics_repo.log(
+                    SiteAnalyticsEntry(
+                        user=uploader,
+                        site=selected_site,
+                        action=SiteAction.UPLOAD_MEDIA,
                     )
                 )

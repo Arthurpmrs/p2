@@ -42,6 +42,7 @@ class Site:
 @dataclass
 class Media:
     id: int = field(init=False)
+    uploader: User
     filename: str
     path: Path
     media_type: MediaType
@@ -109,6 +110,16 @@ class Post:
         print(" ")
         print(" ")
 
+    def display_post_short(self, language: str | None = None):
+        if not language:
+            language = self.default_language
+
+        content = self.post_content_by_language[language]
+
+        print(f"[{language}] ", content["title"])
+        print(f"{self.poster.username}@{self.created_at}")
+        print(" ")
+
     def get_default_title(self) -> str:
         if len(self.post_content_by_language) == 0:
             return "Não foi fornecido um título para esse Post."
@@ -123,3 +134,51 @@ class Comment:
     commenter: User
     body: str
     created_at: datetime = field(default_factory=datetime.now)
+
+
+@dataclass(kw_only=True)
+class AnalyticsEntry(ABC):
+    id: int = field(init=False)
+    user: User
+    created_at: datetime = field(default_factory=datetime.now)
+    metadata: dict[str, str] = field(default_factory=dict[str, str])
+
+    @abstractmethod
+    def display_log(self):
+        pass
+
+
+class SiteAction(Enum):
+    ACCESS = 1
+    CREATE_POST = 2
+    UPLOAD_MEDIA = 3
+
+
+@dataclass(kw_only=True)
+class SiteAnalyticsEntry(AnalyticsEntry):
+    site: Site
+    action: SiteAction
+
+    def display_log(self):
+        print(
+            f"{self.site.name} - {self.user.username}@{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - {str(self.action)}"
+        )
+
+
+class PostAction(Enum):
+    VIEW = 1
+    COMMENT = 2
+    SHARE = 3
+
+
+@dataclass(kw_only=True)
+class PostAnalyticsEntry(AnalyticsEntry):
+    site: Site
+    post: Post
+    action: PostAction
+
+    def display_log(self):
+        print(f"{self.site.name} - {self.post.get_default_title()[:40]}")
+        print(
+            f"  {self.user.username}@{self.created_at.strftime('%Y-%m-%d %H:%M:%S')} - {str(self.action)}"
+        )

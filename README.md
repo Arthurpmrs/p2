@@ -12,7 +12,7 @@ python main.py
 - [x] Comment and Review System: Foi criado sistema de comentários. Um usuário pode comentar num Post de um Site.
 - [x] Media Library Management
 - [x] Content Scheduling
-- [ ] Analytics and Reporting
+- [x] Analytics and Reporting
 - [ ] Template and Design Customization
 - [ ] SEO Optimization Tools
 - [x] Multi-Language Support
