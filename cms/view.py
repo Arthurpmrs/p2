@@ -97,11 +97,11 @@ class Menu:
 
             else:
                 options: list[MenuOptions] = [
+                    {"message": "Fazer Login", "function": self.login},
                     {
                         "message": "Registrar um novo usuário",
                         "function": self.create_user,
                     },
-                    {"message": "Fazer Login", "function": self.login},
                 ]
 
             for i, option in enumerate(options):
@@ -293,14 +293,16 @@ class Menu:
         input("Usuário Criado! Clique Enter para voltar ao menu.")
 
     def login(self):
-        username = input("Username: ")
-        password = input("Senha: ")
+        while True:
+            username = input("Username: ")
+            password = input("Senha: ")
 
-        try:
-            user = self.user_repo.validate_user(username, password)
-        except ValueError:
-            print("Credenciais Inválidas")
-            return
+            try:
+                user = self.user_repo.validate_user(username, password)
+                break
+            except ValueError:
+                os.system("clear")
+                print("Credenciais Inválidas!\n")
 
         self.logged_user = user
 
