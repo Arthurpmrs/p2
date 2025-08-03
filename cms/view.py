@@ -6,6 +6,7 @@ from cms.models import (
     Comment,
     Media,
     MediaBlock,
+    Permission,
     Post,
     PostAction,
     PostAnalyticsEntry,
@@ -24,6 +25,7 @@ from cms.repository import (
     AnalyticsRepository,
     CommentRepository,
     MediaRepository,
+    PermissionRepository,
     PostRepository,
     SiteRepository,
     UserRepository,
@@ -51,6 +53,7 @@ class Menu:
         self.comment_repo = CommentRepository()
         self.media_repo = MediaRepository()
         self.analytics_repo = AnalyticsRepository()
+        self.permission_repo = PermissionRepository()
         self._populate()
         self.logged_user = None
         self.selected_site = None
@@ -135,7 +138,7 @@ class Menu:
             {"message": "Listar posts do site", "function": self.select_post},
         ]
 
-        if self.logged_user.username == self.selected_site.owner.username:
+        if self.permission_repo.has_permission(self.logged_user, self.selected_site):
             options.extend(
                 [
                     {
@@ -153,6 +156,16 @@ class Menu:
                     },
                 ]
             )
+
+            if self.logged_user.username == self.selected_site.owner.username:
+                options.extend(
+                    [
+                        {
+                            "message": "Adicionar Gerente",
+                            "function": self.add_manager,
+                        },
+                    ]
+                )
 
         while True:
             os.system("clear")
@@ -181,7 +194,7 @@ class Menu:
             options[selected_option - 1]["function"]()
 
     def post_menu(self):
-        if not self.logged_user or not self.selected_post:
+        if not self.logged_user or not self.selected_post or not self.selected_site:
             return
 
         self.selected_post_language = self.selected_post.default_language
@@ -196,7 +209,7 @@ class Menu:
             {"message": "Compartilhar post", "function": self.share_post},
         ]
 
-        if self.logged_user.username == self.selected_post.poster.username:
+        if self.permission_repo.has_permission(self.logged_user, self.selected_site):
             options.extend(
                 [
                     {
@@ -246,7 +259,7 @@ class Menu:
         if not self.logged_user or not self.selected_site:
             return
 
-        if not self.logged_user.username == self.selected_site.owner.username:
+        if self.permission_repo.has_permission(self.logged_user, self.selected_site):
             return
 
         options: list[MenuOptions] = [
@@ -345,6 +358,8 @@ class Menu:
         description = input("Informe uma descrição breve para o site: ")
         site = Site(owner=self.logged_user, name=site_name, description=description)
         self.site_repo.add_site(site)
+        permission = Permission(user=self.logged_user, site=site)
+        self.permission_repo.grant_permission(permission)
 
         input("Site criado. Clique Enter para voltar ao menu.")
 
@@ -458,6 +473,47 @@ class Menu:
 
         print(" ")
         input("Post criado. Clique Enter para voltar ao menu.")
+
+    def add_manager(self):
+        if not self.logged_user or not self.selected_site:
+            return
+
+        print("Selecione um usuário para ser gerente da página:")
+        users = self.permission_repo.get_not_managers(
+            self.selected_site, self.user_repo
+        )
+        for i, user in enumerate(users):
+            print(f"{i + 1}. {user.username} ({user.email})")
+        print("0. Voltar")
+
+        selected_indexes = input(
+            "\nDigite os números separados por vírgula (ex: 1,3): "
+        ).split(",")
+
+        for idx in selected_indexes:
+            idx = idx.strip()
+
+            if not idx.isdigit():
+                continue
+
+            n = int(idx)
+
+            if n == 0:
+                return
+
+            if n < 0 or n > len(users):
+                print("Opção inválida.\n")
+                continue
+
+            if 1 <= n <= len(users):
+                user = users[n - 1]
+                print(f"Permissão de gerência dada ao usuário {user.username}.")
+                self.permission_repo.grant_permission(
+                    Permission(user=user, site=self.selected_site)
+                )
+
+        print(" ")
+        input("Clique Enter para voltar ao menu.")
 
     def show_site_analytics(self):
         if not self.selected_site:
@@ -939,6 +995,7 @@ class Menu:
             owner=admin, name="Meu blog", description="Meus pensamentos e dia-a-dia."
         )
         self.site_repo.add_site(site)
+        self.permission_repo.grant_permission(Permission(user=admin, site=site))
         self._populate_medias(admin, site)
         post1 = Post(
             poster=admin,

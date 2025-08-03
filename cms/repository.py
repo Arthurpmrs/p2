@@ -4,6 +4,7 @@ from cms.models import (
     AnalyticsEntry,
     Comment,
     Media,
+    Permission,
     Post,
     PostAction,
     PostAnalyticsEntry,
@@ -23,6 +24,9 @@ class UserRepository:
         user.id = user_id
         self.users.update({user_id: user})
         return user_id
+
+    def get_users(self) -> list[User]:
+        return list(self.users.values())
 
     def validate_user(self, username: str, password: str) -> User:
         selected_user = None
@@ -136,6 +140,26 @@ class SiteRepository:
 
     def get_user_sites(self, user: User) -> list[Site]:
         return [site for site in self.sites.values() if site.owner.id == user.id]
+
+
+class PermissionRepository:
+    permissions: dict[tuple[int, int], Permission] = {}
+
+    def grant_permission(self, permission: Permission):
+        self.permissions.update({(permission.user.id, permission.site.id): permission})
+
+    def has_permission(self, user: User, site: Site) -> bool:
+        return True if self.permissions.get((user.id, site.id)) else False
+
+    def get_not_managers(self, site: Site, repo: UserRepository) -> list[User]:
+        has_permission = [
+            permission.user.id
+            for permission in self.permissions.values()
+            if permission.site.id == site.id
+        ]
+        users = repo.get_users()
+
+        return [user for user in users if user.id not in has_permission]
 
 
 class PostRepository:

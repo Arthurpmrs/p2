@@ -60,6 +60,12 @@ class Site:
 
 
 @dataclass
+class Permission:
+    user: User
+    site: Site
+
+
+@dataclass
 class Media:
     id: int = field(init=False)
     uploader: User
